@@ -1,0 +1,166 @@
+# Continual Learning NS-GRPO Configuration
+# This configuration file is designed for continual learning scenarios with multiple sequential tasks.
+
+# Hydra search path configuration
+hydra:
+  searchpath:
+    - file://verl/trainer/config
+
+# Use base PPO trainer config as default, then override with continual learning specific settings
+defaults:
+  - ppo_trainer
+  - _self_
+
+# Data configuration for continual learning
+data:
+  # Training files for continual learning: List of lists, where each inner list represents a task
+  # Example format:
+  #   train_files:
+  #     - [task1_file1.parquet, task1_file2.parquet]  # Task 1
+  #     - [task2_file1.parquet]                        # Task 2
+  #     - [task3_file1.parquet, task3_file2.parquet]  # Task 3
+  train_files:
+    - ["data/task1/train.parquet"]
+    - ["data/task2/train.parquet"]
+    - ["data/task3/train.parquet"]
+
+  # Validation files for continual learning (same format as train_files)
+  val_files:
+    - ["data/task1/val.parquet"]
+    - ["data/task2/val.parquet"]
+    - ["data/task3/val.parquet"]
+  num_tasks: -1
+
+trainer:
+  # Project name for experiment tracking
+  project_name: verl-continual-ns-grpo
+
+  # Experiment name
+  experiment_name: continual_learning_experiment
+
+  # Logging backends: ["console", "wandb"]
+  logger: ["console", "wandb"]
+
+  # Number of nodes
+  nnodes: 1
+
+  # Number of GPUs per node
+  n_gpus_per_node: 8
+
+  # Number of epochs per task
+  total_epochs: 10
+
+  # Optional per-task epoch override. When set, this list takes precedence over total_epochs
+  # and must match the discovered task count from data.train_files.
+  # Example for two tasks: [1, 10]
+  task_epochs: [1,2]
+
+  # Optional per-task step override. When set, this takes precedence over task_epochs.
+  # Each value must be a positive integer or -1.
+  # -1 means: train exactly one epoch for that task.
+  # Example for two tasks: [-1, 200]
+  task_steps: null
+
+  # Save frequency (iterations)
+  save_freq: 2
+
+  # Validation frequency (iterations)
+  test_freq: 2
+
+  # Critic warmup steps
+  critic_warmup: 0
+
+  # Resume mode: "auto", "disable", or "resume_path"
+  resume_mode: auto
+
+  # Whether to validate before training
+  val_before_train: True
+
+  # Whether to balance batch across DP ranks
+  balance_batch: True
+
+  # Default checkpoint directory
+  default_local_dir: checkpoints/${trainer.project_name}/${trainer.experiment_name}
+
+  # Maximum critic checkpoints to keep
+  max_critic_ckpt_to_keep: 3
+
+# Actor and rollout configuration
+actor_rollout_ref:
+  actor:
+    # Custom optimizer for actor
+    fsdp_config:
+      use_orig_params: true
+    optim:
+      optimizer: "AdamW_null_space"
+      optimizer_impl: "recipe.continual_ns_grpo.ns_adamw"
+  # Null-space projection (NSP) configuration for continual learning.
+  nsp:
+    enable_nullspace_projection: true
+    block_null_space_projection: true
+    # Dynamic replay-anchor NSP: periodically rebuild projection matrices from
+    # externally provided replay samples instead of collecting covariance on task-0.
+    anchor_task_id: 0
+    projection_update_mode: "dynamic"
+    update_projections_every: 5
+    anchor_update_interval: 5
+    should_update_NSP_first_step: true
+    reset_stats_on_task_start: false
+  replay:
+    enable_interference_recall: true
+    # Optional jsonl seed file(s) for preloading replay candidates before training starts.
+    # Each line should at least contain `prompt`/`prompt_text` and one of
+    # `generation`/`answer`/`reference`/`target_text`/`answer_text`.
+    seed_jsonl_path: "/data/shengke/rl_data/blending_science_code_math.jsonl"
+    seed_jsonl_path_list: null
+    ingest_task_replay_candidates: false
+    seed_jsonl_max_examples_per_file: 0
+    sentinel_selection_max_examples: 1024
+    sentinel_candidate_cap: 2048
+    sentinel_sample_count: 64
+    selected_cluster_num_k: 10
+    num_replayed_examples_per_cluster: 8
+    sft_replay_batch_size: 4
+    replay_loss_lambda: 0.1
+    start_decay_step: 20
+    sentinel_eval_interval: 1
+    sentinel_hidden_state_batch_size: 4
+    sentinel_sft_max_seq_length: 8192
+    sft_target_key: null
+    sentinel_shuffle_candidates: true
+    sentinel_kmeans_iters: 25
+    score_alpha: 1.0
+    score_beta: 1.0
+    prototype_hidden_layer_index: -2
+    prototype_ema_decay: 0.95
+    prototype_update_interval: 1
+    prototype_task_ids: [0]
+
+# Continual learning specific configuration
+continual_learning:
+  # Strategy for handling catastrophic forgetting
+  # Options: "none", "replay", "ewc", "progressive"
+  forgetting_strategy: none
+
+  # Whether to save intermediate task checkpoints
+  save_task_checkpoints: True
+
+  # Whether to evaluate on all previous tasks after each task
+  eval_all_tasks: True
+
+# Transfer queue configuration
+transfer_queue:
+  enable: False
+
+# Ray configuration
+ray_kwargs:
+  ray_init:
+    num_cpus: null
+  timeline_json_file: null
+
+# Profiler configuration
+global_profiler:
+  tool: null
+  steps: null
+  profile_continuous_steps: False
+  save_path: "outputs/profile"
