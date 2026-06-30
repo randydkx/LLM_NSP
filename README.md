@@ -134,7 +134,7 @@ $$
 5. 层级自适应：对每层计算重要性得分 $s_\ell$，例如 Fisher 或激活统计，只对 top-$K$ 或 top-ratio 的层启用 NSP：**
 
 $$
-\mathcal{L}_{\text{NSP}} = \operatorname{Top}_K(\{s_\ell\}_{\ell=1}^{L}).
+\mathcal{L}_{\text{NSP}} = {Top}_K(\{s_\ell\}_{\ell=1}^{L}).
 $$
 
 6. 非均匀分段：对高重要性特征用更细粒度保护。若特征重要性为 $a_j$，则可只对高重要性维度投影：
